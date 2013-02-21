@@ -1,4 +1,4 @@
 osgitest
 ========
 
-A Framework for Unit Testing OSGi Services
+A Framework for Unit Testing OSGi Services.
