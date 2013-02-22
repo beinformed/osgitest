@@ -1,0 +1,4 @@
+Bundle-Version: 1.0.0
+Export-Package: com.beinformed.framework.osgi.osgitest.base,\
+	com.beinformed.framework.osgi.osgitest.annotation,\
+	com.beinformed.framework.osgi.osgitest

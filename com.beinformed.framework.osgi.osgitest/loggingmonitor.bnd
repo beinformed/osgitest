@@ -1,0 +1,3 @@
+Private-Package: com.beinformed.framework.osgi.osgitest.monitor.logging
+Bundle-Activator: com.beinformed.framework.osgi.osgitest.monitor.logging.Activator
+Bundle-Version: 1.0.0
