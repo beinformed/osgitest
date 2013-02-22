@@ -1,0 +1,3 @@
+Private-Package: com.beinformed.framework.osgi.osgitest.annotation.processor
+Bundle-Activator: com.beinformed.framework.osgi.osgitest.annotation.processor.Activator
+Bundle-Version: 1.0.0

@@ -1,0 +1,6 @@
+Private-Package: com.beinformed.framework.osgi.osgitest.samples.coded,\
+	com.beinformed.framework.osgi.osgitest.samples,\
+	com.beinformed.framework.osgi.osgitest.samples.annotation,\
+	com.beinformed.framework.osgi.osgitest.samples.base
+Bundle-Activator: com.beinformed.framework.osgi.osgitest.samples.Activator
+Bundle-Version: 1.0.0

@@ -1,0 +1,3 @@
+Bundle-Version: 1.0.0
+Bundle-Activator: com.beinformed.framework.osgi.osgitest.testrunner.Activator
+Private-Package: com.beinformed.framework.osgi.osgitest.testrunner

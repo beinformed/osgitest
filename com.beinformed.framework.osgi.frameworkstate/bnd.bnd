@@ -1,0 +1,5 @@
+-buildpath: osgi.core,\
+	org.apache.commons.lang,\
+	org.apache.felix.dependencymanager,\
+	slf4j.api
+-sub: *.bnd
