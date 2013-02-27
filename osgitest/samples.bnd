@@ -4,3 +4,7 @@ Private-Package: com.beinformed.framework.osgi.osgitest.samples.coded,\
 	com.beinformed.framework.osgi.osgitest.samples.base
 Bundle-Activator: com.beinformed.framework.osgi.osgitest.samples.Activator
 Bundle-Version: 1.0.0
+Bundle-Name: OSGi test samples
+Bundle-Copyright: Be Informed B.V.
+Bundle-License: http://www.apache.org/licenses/LICENSE-2.0
+Include-Resource: META-INF/LICENSE=META-INF/LICENSE

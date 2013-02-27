@@ -11,16 +11,16 @@
 	osgi.identity;filter:='(osgi.identity=osgitest.samples)'
 -runbundles: ch.qos.logback.classic;version='[1.0.0,1.0.1)',\
 	ch.qos.logback.core;version='[1.0.0,1.0.1)',\
-	com.beinformed.framework.osgi.frameworkstate.api;version=latest,\
-	com.beinformed.framework.osgi.frameworkstate.entropy;version=latest,\
-	com.beinformed.framework.osgi.osgitest.annotationprocessor;version=latest,\
-	com.beinformed.framework.osgi.osgitest.api;version=latest,\
-	com.beinformed.framework.osgi.osgitest.launcher;version=latest,\
-	com.beinformed.framework.osgi.osgitest.loggingmonitor;version=latest,\
-	com.beinformed.framework.osgi.osgitest.testrunner;version=latest,\
+	com.beinformed.framework.osgi.frameworkstate.api;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.frameworkstate.entropy;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.osgitest.annotationprocessor;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.osgitest.api;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.osgitest.launcher;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.osgitest.loggingmonitor;version='[1.0.0,1.0.1)',\
+	com.beinformed.framework.osgi.osgitest.testrunner;version='[1.0.0,1.0.1)',\
 	org.apache.commons.lang;version='[2.6.0,2.6.1)',\
 	org.apache.felix.configadmin;version='[1.4.0,1.4.1)',\
-	org.apache.felix.dependencymanager;version='[3.1.0,3.1.1)',\
+	org.apache.felix.dependencymanager;version='[3.1.1,3.1.2)',\
 	org.apache.felix.metatype;version='[1.0.4,1.0.5)',\
-	osgitest.samples;version=latest,\
+	osgitest.samples;version='[1.0.0,1.0.1)',\
 	slf4j.api;version='[1.6.2,1.6.3)'
