@@ -1,2 +1,6 @@
 Bundle-Version: 1.0.0
 Export-Package: com.beinformed.framework.osgi.frameworkstate;version=1.0.0
+Bundle-Name: OSGi framework state framework api
+Bundle-Copyright: Be Informed B.V.
+Bundle-License: http://www.apache.org/licenses/LICENSE-2.0
+Include-Resource: META-INF/LICENSE=META-INF/LICENSE
