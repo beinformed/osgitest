@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.beinformed.framework.osgi</groupId>
+  <artifactId>samples</artifactId>
+  <version>1.0.0</version>
+  <packaging>bundle</packaging>
+
+  <name>OSGi test samples</name>
+
+  <organization>
+    <name>Be Informed B.V.</name>
+    <url>http://www.beinformed.com/</url>
+  </organization>
+
+  <licenses>
+     <license>
+        <name>Apache License, Version 2.0</name>
+        <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+     </license>
+   </licenses>    
+
+  <repositories>
+    <repository>
+      <id>monnet01</id>
+      <name>Monnet repository</name>
+      <url>http://monnet01.sindice.net/mvn</url>
+    </repository>
+  </repositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.felix</groupId>
+      <artifactId>org.osgi.core</artifactId>
+      <version>1.4.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>osgitest.api</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>frameworkstate.api</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.felix</groupId>
+      <artifactId>org.apache.felix.dependencymanager</artifactId>
+      <version>3.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>frameworkstate.entropy</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>osgitest.annotationprocessor</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>osgitest.launcher</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>osgitest.loggingmonitor</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.beinformed.framework.osgi</groupId>
+      <artifactId>osgitest.testrunner</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>src/</sourceDirectory>
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>1.5</source>
+          <target>1.5</target>
+        </configuration>
+      </plugin>
+      <plugin>
+         <groupId>org.apache.felix</groupId>
+         <artifactId>maven-bundle-plugin</artifactId>
+         <version>2.3.6</version>
+         <extensions>true</extensions>
+         <configuration>
+           <instructions>
+             <Private-Package>com.beinformed.framework.osgi.osgitest.samples.coded,com.beinformed.framework.osgi.osgitest.samples,com.beinformed.framework.osgi.osgitest.samples.annotation,com.beinformed.framework.osgi.osgitest.samples.base</Private-Package>
+            <Bundle-Activator>com.beinformed.framework.osgi.osgitest.samples.Activator</Bundle-Activator>
+          </instructions>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>eu.monnetproject</groupId>
+        <artifactId>osgirun</artifactId>
+        <version>1.12.2</version>
+      </plugin>
+    </plugins>
+  </build>
+    
+</project>
