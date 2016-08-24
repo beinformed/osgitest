@@ -190,8 +190,8 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		}
 	}
 
-	void serviceChanged(ServiceReference reference, Object service) {
-		if (isValidService(reference, service)) {
+	void serviceSwapped(ServiceReference oldReference, Object oldService, ServiceReference newReference, Object newService) {
+		if (isValidService(newReference, newService)) {
 			handleSystemNoise();
 		}
 	}

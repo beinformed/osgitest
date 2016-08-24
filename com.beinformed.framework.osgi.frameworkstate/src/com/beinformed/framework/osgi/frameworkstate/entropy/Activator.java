@@ -34,7 +34,7 @@ public class Activator extends DependencyActivatorBase {
 				.add(createServiceDependency().setService(FrameworkStateListener.class)
 						.setCallbacks("listenerAdded", null, "listenerRemoved", null))
 				.add(createServiceDependency().setService("(objectClass=*)")
-						.setCallbacks("serviceAdded", null, "serviceRemoved", "serviceChanged")));
+						.setCallbacks("serviceAdded", null, "serviceRemoved", "serviceSwapped")));
 	}
 	
 	@Override

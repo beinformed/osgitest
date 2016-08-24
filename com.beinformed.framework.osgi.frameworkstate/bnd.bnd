@@ -1,5 +1,6 @@
--buildpath: osgi.core,\
-	org.apache.commons.lang,\
-	org.apache.felix.dependencymanager,\
+-buildpath: \
+	lib/org.apache.commons.lang-2.6.0.jar;version=file,\
+	osgi.core,\
+	org.apache.felix.dependencymanager;version='[4.1.1,4.1.1]',\
 	slf4j.api
 -sub: *.bnd
