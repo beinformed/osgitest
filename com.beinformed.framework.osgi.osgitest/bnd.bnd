@@ -1,6 +1,6 @@
 -buildpath: slf4j.api,\
 	org.apache.commons.lang,\
-	org.apache.felix.dependencymanager,\
+	org.apache.felix.dependencymanager;version='[4.1.1,4.1.1]',\
 	osgi.core,\
 	com.beinformed.framework.osgi.frameworkstate.api;version=latest
 -sub: *.bnd

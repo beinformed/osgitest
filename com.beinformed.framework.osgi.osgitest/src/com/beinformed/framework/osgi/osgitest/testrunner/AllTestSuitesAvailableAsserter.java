@@ -25,8 +25,9 @@ import java.util.Map;
 import org.apache.commons.lang.StringUtils;
 import org.apache.felix.dm.Component;
 import org.apache.felix.dm.ComponentDeclaration;
-import org.apache.felix.dm.Dependency;
 import org.apache.felix.dm.DependencyManager;
+import org.apache.felix.dm.context.ComponentContext;
+import org.apache.felix.dm.context.DependencyContext;
 
 import com.beinformed.framework.osgi.osgitest.TestCase;
 import com.beinformed.framework.osgi.osgitest.TestMonitor;
@@ -39,7 +40,6 @@ import com.beinformed.framework.osgi.osgitest.TestSuite;
  */
 public class AllTestSuitesAvailableAsserter {
 
-	@SuppressWarnings("unchecked")
 	/**
 	 * Asserts that there are no unavailable TestSuites due to missing dependencies.
 	 * @param monitor
@@ -52,12 +52,11 @@ public class AllTestSuitesAvailableAsserter {
 			for (Object componentObject : new ArrayList<Object>(manager.getComponents())) {
 				Component component = (Component) componentObject;
 
-				for (Object dependencyObject : component.getDependencies()) {
-					Dependency dependency = (Dependency) dependencyObject;
-					if (dependency.isRequired() && !dependency.isAvailable()) {
+				for (DependencyContext dependencyContext : ((ComponentContext)component).getDependencies()) {
+					if (dependencyContext.isRequired() && !dependencyContext.isAvailable()) {
 						String componentName = ((ComponentDeclaration) component).getName();
 						if (componentName.contains(TestSuite.class.getName())) {
-							addMissingTestSuite(missingTestSuitesAndDeps, component, dependency);
+							addMissingTestSuite(missingTestSuitesAndDeps, component, dependencyContext);
 						}
 
 					}
@@ -77,7 +76,7 @@ public class AllTestSuitesAvailableAsserter {
 	 * @param dependency the current missing dependency
 	 * @param componentName
 	 */
-	private void addMissingTestSuite(Map<String, List<String>> missingTestSuitesAndDeps, Component component, Dependency dependency) {
+	private void addMissingTestSuite(Map<String, List<String>> missingTestSuitesAndDeps, Component component, DependencyContext dependencyContext) {
 		TestSuite testSuite = getTestSuite(component);
 		String componentName;
 		if (testSuite != null) {
@@ -91,7 +90,7 @@ public class AllTestSuitesAvailableAsserter {
 			missingDeps = new ArrayList<String>();
 			missingTestSuitesAndDeps.put(componentName, missingDeps);
 		}
-		missingDeps.add(dependency.toString());
+		missingDeps.add(dependencyContext.toString());
 	}
 
 	/**
