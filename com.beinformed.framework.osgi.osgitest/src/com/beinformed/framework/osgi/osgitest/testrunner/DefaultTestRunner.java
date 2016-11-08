@@ -21,11 +21,17 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.felix.dm.Component;
+import org.apache.felix.dm.DependencyManager;
 import org.osgi.framework.ServiceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +41,7 @@ import com.beinformed.framework.osgi.osgitest.TestMonitor;
 import com.beinformed.framework.osgi.osgitest.TestRunner;
 import com.beinformed.framework.osgi.osgitest.TestSuite;
 import com.beinformed.framework.osgi.osgitest.base.NullTestMonitor;
+import com.beinformed.framework.osgi.osgitest.base.TestSuiteLifecycle;
 
 /**
  * Default test runner implementation. <br />
@@ -62,6 +69,8 @@ public class DefaultTestRunner implements TestRunner {
 	private int nrOfTestRuns = 1;
 
 	private AllTestSuitesAvailableAsserter allTestSuitesAvailableAsserter = new AllTestSuitesAvailableAsserter();
+	
+	private volatile DependencyManager dependencyManager;
 	
 	public DefaultTestRunner() {
 		String deploymentTestingEnabledString = System.getProperty("osgitest.deploymentTestEnabled");
@@ -162,6 +171,38 @@ public class DefaultTestRunner implements TestRunner {
 	}
 
 	private void executeTest(final TestSuite testSuite) {
+		// check for TestSuiteLifecycle
+		DependencyManager lifecycleManager = new DependencyManager(dependencyManager.getBundleContext());
+		Properties serviceProperties = new Properties();
+		String sessionId = UUID.randomUUID().toString();
+		serviceProperties.put("session.id", sessionId);
+		TestSuiteLifecycleInitializer initializer = new TestSuiteLifecycleInitializer();
+		Component lifecycleInitializerComponent = dependencyManager.createComponent()
+				.setImplementation(initializer)
+				.setInterface(TestSuiteLifecycleInitializer.class.getName(), null)
+				.add(dependencyManager.createServiceDependency().setService(TestSuiteLifecycle.class, "(session.id=" + sessionId + ")")
+						.setRequired(true));
+		dependencyManager.add(lifecycleInitializerComponent);
+		Component lifecycleWiringComponent = dependencyManager.createComponent()
+				.setImplementation(testSuite)
+				.setInterface(TestSuiteLifecycle.class.getName(), serviceProperties);
+		if (testSuite instanceof TestSuiteLifecycle) {
+			TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
+			lifecycle.setup(lifecycleManager);
+			
+			lifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
+			dependencyManager.add(lifecycleWiringComponent);
+			
+			if (!initializer.await(5000, TimeUnit.SECONDS)) {
+				monitor.error("Test lifecycle wiring timed out. Dependencies could not be satisfied.", null);
+				dependencyManager.remove(lifecycleInitializerComponent);
+				dependencyManager.remove(lifecycleWiringComponent);
+				return;
+			}
+			
+			((TestSuiteLifecycle) testSuite).initializeTestSuite();
+		}
+		
 		boolean runInParallel = isTestSuiteConcurrent(testSuite.getLabel());
 
 		monitor.beginTestSuite(testSuite);
@@ -173,6 +214,34 @@ public class DefaultTestRunner implements TestRunner {
 			monitor.error("Exception while running test suite", t);
 		} finally {
 			monitor.endTestSuite(testSuite);
+			
+			if (testSuite instanceof TestSuiteLifecycle) {
+				TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
+				lifecycle.cleanupTestSuite();
+				lifecycleManager.clear(); // teardown all configuration
+				dependencyManager.remove(lifecycleInitializerComponent);
+				dependencyManager.remove(lifecycleWiringComponent);
+			}
+		}
+	}
+	
+	static class TestSuiteLifecycleInitializer {
+		private CountDownLatch latch;
+
+		public TestSuiteLifecycleInitializer() {
+			this.latch = new CountDownLatch(1);
+		}
+		
+		void start() { // will be called once all dependencies are satisfied
+			latch.countDown();
+		}
+		
+		boolean await(long timeout, TimeUnit unit) {
+			try {
+				return latch.await(timeout, unit);
+			} catch (InterruptedException e) {
+				return false;
+			}
 		}
 	}
 

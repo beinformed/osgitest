@@ -29,6 +29,7 @@ public class TestLauncher implements FrameworkStateListener {
 	private volatile TestRunner testRunner;
 	private volatile DependencyManager manager;
 	private boolean shutdownOnFinish = false;
+	private boolean hasRun = false;
 	
 	public TestLauncher() {
 		String shutdownOnFinishProperty = System.getProperty("osgitest.shutdownOnFinish");
@@ -55,14 +56,17 @@ public class TestLauncher implements FrameworkStateListener {
 
 	@Override
 	public void onAvailable() {
-		LOGGER.info("Executing tests");
-		testRunner.executeTests();
-		if (shutdownOnFinish) {
-			try {
-				LOGGER.info("Shutting down the framework");
-				manager.getBundleContext().getBundle(0).stop();
-			} catch (BundleException e) {
-				e.printStackTrace();
+		if (!hasRun) {
+			LOGGER.info("Executing tests");
+			testRunner.executeTests();
+			hasRun = true;
+			if (shutdownOnFinish) {
+				try {
+					LOGGER.info("Shutting down the framework");
+					manager.getBundleContext().getBundle(0).stop();
+				} catch (BundleException e) {
+					e.printStackTrace();
+				}
 			}
 		}
 	}

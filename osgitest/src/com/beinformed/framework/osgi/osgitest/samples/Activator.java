@@ -21,6 +21,7 @@ import org.osgi.framework.BundleContext;
 
 import com.beinformed.framework.osgi.osgitest.TestSuite;
 import com.beinformed.framework.osgi.osgitest.samples.annotation.MyAnnotationBasedTestSuite;
+import com.beinformed.framework.osgi.osgitest.samples.base.MyBaseClassBasedLifecycleTestSuite;
 import com.beinformed.framework.osgi.osgitest.samples.base.MyBaseClassBasedTestSuite;
 import com.beinformed.framework.osgi.osgitest.samples.coded.SimpleCodedTestSuite;
 
@@ -39,6 +40,10 @@ public class Activator extends DependencyActivatorBase {
 		TestSuite testSuite = new MyBaseClassBasedTestSuite("My base class based testsuite");
 		manager.add(manager.createComponent().setInterface(TestSuite.class.getName(), null)
 				.setImplementation(testSuite));
+		
+		TestSuite lifecycleTestSuite = new MyBaseClassBasedLifecycleTestSuite("My base class lifecycle based testsuite");
+		manager.add(manager.createComponent().setInterface(TestSuite.class.getName(), null)
+				.setImplementation(lifecycleTestSuite));
 	}
 	
 	@Override
