@@ -1,4 +1,5 @@
 -sub: *.bnd
 -buildpath: osgi.core,\
+	slf4j.api,\
 	com.beinformed.framework.osgi.osgitest.api;version=latest,\
 	org.apache.felix.dependencymanager;version="[4.1.1, 4.1.1]"

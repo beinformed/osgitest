@@ -32,7 +32,9 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang.StringUtils;
 import org.apache.felix.dm.Component;
 import org.apache.felix.dm.DependencyManager;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
+import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -170,42 +172,50 @@ public class DefaultTestRunner implements TestRunner {
 		return null;
 	}
 
-	private void executeTest(final TestSuite testSuite) {
+	private void executeTest(TestSuite testSuite) {
 		// check for TestSuiteLifecycle
-		DependencyManager lifecycleManager = new DependencyManager(dependencyManager.getBundleContext());
-		Properties serviceProperties = new Properties();
-		String sessionId = UUID.randomUUID().toString();
-		serviceProperties.put("session.id", sessionId);
-		TestSuiteLifecycleInitializer initializer = new TestSuiteLifecycleInitializer();
-		Component lifecycleInitializerComponent = dependencyManager.createComponent()
-				.setImplementation(initializer)
-				.setInterface(TestSuiteLifecycleInitializer.class.getName(), null)
-				.add(dependencyManager.createServiceDependency().setService(TestSuiteLifecycle.class, "(session.id=" + sessionId + ")")
-						.setRequired(true));
-		dependencyManager.add(lifecycleInitializerComponent);
-		Component lifecycleWiringComponent = dependencyManager.createComponent()
-				.setImplementation(testSuite)
-				.setInterface(TestSuiteLifecycle.class.getName(), serviceProperties);
+		DependencyManager lifecycleManager = null;
+		Component lifecycleWiringComponent = null;
+		Component lifecycleInitializerComponent = null;
+		boolean runInParallel = isTestSuiteConcurrent(testSuite.getLabel());
+
+		monitor.beginTestSuite(testSuite);
 		if (testSuite instanceof TestSuiteLifecycle) {
+			lifecycleManager = new DependencyManager(dependencyManager.getBundleContext());
+			Properties serviceProperties = new Properties();
+			String sessionId = UUID.randomUUID().toString();
+			serviceProperties.put("session.id", sessionId);
+			TestSuiteLifecycleInitializer initializer = new TestSuiteLifecycleInitializer();
+			lifecycleInitializerComponent = dependencyManager.createComponent()
+					.setImplementation(initializer)
+					.setInterface(TestSuiteLifecycleInitializer.class.getName(), null)
+					.add(dependencyManager.createServiceDependency().setService(TestSuiteLifecycle.class, "(session.id=" + sessionId + ")")
+							.setRequired(true));
+			dependencyManager.add(lifecycleInitializerComponent);
+			lifecycleWiringComponent = dependencyManager.createComponent()
+					.setImplementation(testSuite)
+					.setInterface(TestSuiteLifecycle.class.getName(), serviceProperties)
+					.setAutoConfig(Component.class, false)
+					.setAutoConfig(BundleContext.class, false)
+					.setAutoConfig(ServiceRegistration.class, false)
+					.setAutoConfig(DependencyManager.class, false);
 			TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
 			lifecycle.setup(lifecycleManager);
 			
 			lifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
 			dependencyManager.add(lifecycleWiringComponent);
 			
-			if (!initializer.await(5000, TimeUnit.SECONDS)) {
-				monitor.error("Test lifecycle wiring timed out. Dependencies could not be satisfied.", null);
+			if (!initializer.await(5, TimeUnit.SECONDS)) {
+				monitor.error("Test lifecycle wiring timed out. Dependencies were not be satisfied.", null);
 				dependencyManager.remove(lifecycleInitializerComponent);
 				dependencyManager.remove(lifecycleWiringComponent);
+				monitor.endTestSuite(testSuite);
 				return;
 			}
 			
 			((TestSuiteLifecycle) testSuite).initializeTestSuite();
 		}
-		
-		boolean runInParallel = isTestSuiteConcurrent(testSuite.getLabel());
 
-		monitor.beginTestSuite(testSuite);
 		try {
 			for (final TestCase testCase : testSuite.getTestCases()) {
 				executeTestCase(testSuite, runInParallel, testCase);
@@ -214,7 +224,6 @@ public class DefaultTestRunner implements TestRunner {
 			monitor.error("Exception while running test suite", t);
 		} finally {
 			monitor.endTestSuite(testSuite);
-			
 			if (testSuite instanceof TestSuiteLifecycle) {
 				TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
 				lifecycle.cleanupTestSuite();

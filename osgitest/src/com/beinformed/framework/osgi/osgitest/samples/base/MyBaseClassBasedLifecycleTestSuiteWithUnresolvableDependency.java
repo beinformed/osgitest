@@ -17,6 +17,7 @@ import java.util.Properties;
 
 import org.apache.felix.dm.Component;
 import org.apache.felix.dm.DependencyManager;
+import org.osgi.framework.ServiceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,47 +25,45 @@ import com.beinformed.framework.osgi.osgitest.TestMonitor;
 import com.beinformed.framework.osgi.osgitest.base.TestSuiteBase;
 import com.beinformed.framework.osgi.osgitest.base.TestSuiteLifecycle;
 
-public class MyBaseClassBasedLifecycleTestSuite extends TestSuiteBase implements TestSuiteLifecycle {
+public class MyBaseClassBasedLifecycleTestSuiteWithUnresolvableDependency extends TestSuiteBase implements TestSuiteLifecycle {
+	
+	private static final Logger LOGGER = LoggerFactory.getLogger(MyBaseClassBasedLifecycleTestSuiteWithUnresolvableDependency.class);
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(MyBaseClassBasedLifecycleTestSuite.class);
-	private volatile Object injected;
-
-	public MyBaseClassBasedLifecycleTestSuite(String label) {
+	public MyBaseClassBasedLifecycleTestSuiteWithUnresolvableDependency(String label) {
 		super(label);
-		addTest("myTestMethod", "My test method (lifecycle)");
+		addTest("myTestMethod", "My test method (lifecycle unresolvable dependency)");
 	}
 	
 	public void myTestMethod(TestMonitor monitor) {
-		monitor.assertion(injected != null, "Injected object is null");
-		monitor.assertion(injected instanceof MyBaseClassBasedLifecycleTestSuite, "Injected object is of an unexpected type.");
-		monitor.assertion(true, "The world is ending (lifecycle). ");
+		monitor.assertion(true, "The world is ending (lifecycle unresolvable dependency). ");
 	}
 
 	@Override
 	public void setup(final DependencyManager dependencyManager) {
 		LOGGER.info("setup...");
-		new Thread(() -> {
-			LOGGER.info("pausing component publishing...");
-			try {
-				Thread.sleep(2000);
-			} catch (Exception e) {
-			}
-			LOGGER.info("publising component...");
-			Properties properties = new Properties();
-			properties.setProperty("key", "bla");
-			dependencyManager.add(dependencyManager.createComponent()
-					.setImplementation(this)
-					.setInterface(Object.class.getName(), properties));
-		}).start();
+		LOGGER.info("publising component...");
+		Properties properties = new Properties();
+		properties.setProperty("key", "bla");
+		dependencyManager.add(dependencyManager.createComponent()
+				.setImplementation(this)
+				.setInterface(Object.class.getName(), properties));
 	}
 
 	@Override
 	public void declareDependencies(Component component, DependencyManager dependencyManager) {
 		LOGGER.info("declare dependencies...");
 		component.add(dependencyManager.createServiceDependency()
-				.setService(Object.class, "(key=bla)")
+				.setService(Object.class, "(key=bla2)")
+				.setCallbacks("addService", "removeService")
 				.setRequired(true));
 		
+	}
+	
+	void addService(ServiceReference ref, Object service) {
+		LOGGER.info("add service ...");
+	}
+	
+	void removeService(ServiceReference ref, Object service) {
 	}
 
 	@Override
