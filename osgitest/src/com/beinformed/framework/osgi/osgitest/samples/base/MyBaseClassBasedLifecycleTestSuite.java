@@ -21,8 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.beinformed.framework.osgi.osgitest.TestMonitor;
+import com.beinformed.framework.osgi.osgitest.TestSuiteLifecycle;
 import com.beinformed.framework.osgi.osgitest.base.TestSuiteBase;
-import com.beinformed.framework.osgi.osgitest.base.TestSuiteLifecycle;
 
 public class MyBaseClassBasedLifecycleTestSuite extends TestSuiteBase implements TestSuiteLifecycle {
 

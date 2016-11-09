@@ -21,8 +21,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -42,8 +40,8 @@ import com.beinformed.framework.osgi.osgitest.TestCase;
 import com.beinformed.framework.osgi.osgitest.TestMonitor;
 import com.beinformed.framework.osgi.osgitest.TestRunner;
 import com.beinformed.framework.osgi.osgitest.TestSuite;
+import com.beinformed.framework.osgi.osgitest.TestSuiteLifecycle;
 import com.beinformed.framework.osgi.osgitest.base.NullTestMonitor;
-import com.beinformed.framework.osgi.osgitest.base.TestSuiteLifecycle;
 
 /**
  * Default test runner implementation. <br />
@@ -174,40 +172,30 @@ public class DefaultTestRunner implements TestRunner {
 
 	private void executeTest(TestSuite testSuite) {
 		// check for TestSuiteLifecycle
-		DependencyManager lifecycleManager = null;
+		DependencyManager lifecycleDependencyManager = null;
 		Component lifecycleWiringComponent = null;
-		Component lifecycleInitializerComponent = null;
 		boolean runInParallel = isTestSuiteConcurrent(testSuite.getLabel());
 
 		monitor.beginTestSuite(testSuite);
 		if (testSuite instanceof TestSuiteLifecycle) {
-			lifecycleManager = new DependencyManager(dependencyManager.getBundleContext());
-			Properties serviceProperties = new Properties();
-			String sessionId = UUID.randomUUID().toString();
-			serviceProperties.put("session.id", sessionId);
-			TestSuiteLifecycleInitializer initializer = new TestSuiteLifecycleInitializer();
-			lifecycleInitializerComponent = dependencyManager.createComponent()
-					.setImplementation(initializer)
-					.setInterface(TestSuiteLifecycleInitializer.class.getName(), null)
-					.add(dependencyManager.createServiceDependency().setService(TestSuiteLifecycle.class, "(session.id=" + sessionId + ")")
-							.setRequired(true));
-			dependencyManager.add(lifecycleInitializerComponent);
+			TestSuiteLifecycle testSuiteLifecycle = (TestSuiteLifecycle) testSuite;
+			lifecycleDependencyManager = new DependencyManager(dependencyManager.getBundleContext());
+			TestSuiteWiringService wiringService = new TestSuiteWiringService(testSuiteLifecycle);
 			lifecycleWiringComponent = dependencyManager.createComponent()
-					.setImplementation(testSuite)
-					.setInterface(TestSuiteLifecycle.class.getName(), serviceProperties)
+					.setImplementation(wiringService)
+					.setComposition("getComposition")
 					.setAutoConfig(Component.class, false)
 					.setAutoConfig(BundleContext.class, false)
 					.setAutoConfig(ServiceRegistration.class, false)
-					.setAutoConfig(DependencyManager.class, false);
-			TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
-			lifecycle.setup(lifecycleManager);
+					.setAutoConfig(DependencyManager.class, false)
+					.setCallbacks(wiringService, null, "start", null, null);
+			testSuiteLifecycle.setup(lifecycleDependencyManager);
 			
-			lifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
+			testSuiteLifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
 			dependencyManager.add(lifecycleWiringComponent);
 			
-			if (!initializer.await(5, TimeUnit.SECONDS)) {
+			if (!wiringService.await(5, TimeUnit.SECONDS)) {
 				monitor.error("Test lifecycle wiring timed out. Dependencies were not be satisfied.", null);
-				dependencyManager.remove(lifecycleInitializerComponent);
 				dependencyManager.remove(lifecycleWiringComponent);
 				monitor.endTestSuite(testSuite);
 				return;
@@ -227,21 +215,27 @@ public class DefaultTestRunner implements TestRunner {
 			if (testSuite instanceof TestSuiteLifecycle) {
 				TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
 				lifecycle.cleanupTestSuite();
-				lifecycleManager.clear(); // teardown all configuration
-				dependencyManager.remove(lifecycleInitializerComponent);
+				lifecycleDependencyManager.clear(); // teardown all configuration
 				dependencyManager.remove(lifecycleWiringComponent);
 			}
 		}
 	}
 	
-	static class TestSuiteLifecycleInitializer {
+	static class TestSuiteWiringService {
+		
+		private TestSuiteLifecycle testSuiteLifecycle;
 		private CountDownLatch latch;
 
-		public TestSuiteLifecycleInitializer() {
+		public TestSuiteWiringService(TestSuiteLifecycle testSuiteLifecycle) {
+			this.testSuiteLifecycle = testSuiteLifecycle;
 			this.latch = new CountDownLatch(1);
 		}
 		
-		void start() { // will be called once all dependencies are satisfied
+		Object[] getComposition() {
+			return new Object[] { testSuiteLifecycle };
+		}
+		
+		void start() {
 			latch.countDown();
 		}
 		
@@ -253,7 +247,7 @@ public class DefaultTestRunner implements TestRunner {
 			}
 		}
 	}
-
+	
 	private void executeTestCase(final TestSuite testSuite, boolean runInParallel, final TestCase testCase) {
 		monitor.beginTest(testCase);
 		try {
