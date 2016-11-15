@@ -119,10 +119,10 @@ public class DefaultTestRunner implements TestRunner {
 		List<TestSuite> testSuitesCopy = new ArrayList<TestSuite>(testSuites.values());
 		Collections.sort(testSuitesCopy, new TestSuiteComparator());
 
-		LOGGER.info("Executing tests (number of testsuites= {})", testSuitesCopy.size());
+		LOGGER.debug("Executing tests (number of testsuites= {})", testSuitesCopy.size());
 
-		LOGGER.info("Current number of warmup runs {}", nrOfWarmUpRuns);
-		LOGGER.info("Current number of test runs {}", nrOfTestRuns);
+		LOGGER.debug("Current number of warmup runs {}", nrOfWarmUpRuns);
+		LOGGER.debug("Current number of test runs {}", nrOfTestRuns);
 		monitor.beginTestRun();
 		allTestSuitesAvailableAsserter.assertAllTestSuitesAvailable(monitor);
 		try {
@@ -130,7 +130,7 @@ public class DefaultTestRunner implements TestRunner {
 				handleWarmUp(nrOfWarmUpRuns, testSuite);
 
 				for (int i = 0; i < nrOfTestRuns; i++) {
-					LOGGER.info("Executing testsuite {} ({})", new Object[] { testSuite.getLabel(), i + 1 });
+					LOGGER.debug("Executing testsuite {} ({})", new Object[] { testSuite.getLabel(), i + 1 });
 					executeTest(testSuite);
 				}
 			}
@@ -150,12 +150,16 @@ public class DefaultTestRunner implements TestRunner {
 		}
 	}
 
-	public void executeTestSuite(String testSuiteLabel) {
+	public boolean executeTestSuite(String testSuiteLabel) {
 		TestSuite testSuite = findTestSuiteByLabel(testSuiteLabel);
 		if (testSuite != null) {
+			monitor.beginTestRun();
 			executeTest(testSuite);
+			monitor.endTestRun();
+			return true;
 		} else {
 			LOGGER.info("No Test suite found with label: {}", testSuiteLabel);
+			return false;
 		}
 	}
 
