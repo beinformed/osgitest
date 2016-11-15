@@ -22,11 +22,17 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.felix.dm.Component;
+import org.apache.felix.dm.DependencyManager;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
+import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +40,7 @@ import com.beinformed.framework.osgi.osgitest.TestCase;
 import com.beinformed.framework.osgi.osgitest.TestMonitor;
 import com.beinformed.framework.osgi.osgitest.TestRunner;
 import com.beinformed.framework.osgi.osgitest.TestSuite;
+import com.beinformed.framework.osgi.osgitest.TestSuiteLifecycle;
 import com.beinformed.framework.osgi.osgitest.base.NullTestMonitor;
 
 /**
@@ -62,6 +69,8 @@ public class DefaultTestRunner implements TestRunner {
 	private int nrOfTestRuns = 1;
 
 	private AllTestSuitesAvailableAsserter allTestSuitesAvailableAsserter = new AllTestSuitesAvailableAsserter();
+	
+	private volatile DependencyManager dependencyManager;
 	
 	public DefaultTestRunner() {
 		String deploymentTestingEnabledString = System.getProperty("osgitest.deploymentTestEnabled");
@@ -110,10 +119,10 @@ public class DefaultTestRunner implements TestRunner {
 		List<TestSuite> testSuitesCopy = new ArrayList<TestSuite>(testSuites.values());
 		Collections.sort(testSuitesCopy, new TestSuiteComparator());
 
-		LOGGER.info("Executing tests (number of testsuites= {})", testSuitesCopy.size());
+		LOGGER.debug("Executing tests (number of testsuites= {})", testSuitesCopy.size());
 
-		LOGGER.info("Current number of warmup runs {}", nrOfWarmUpRuns);
-		LOGGER.info("Current number of test runs {}", nrOfTestRuns);
+		LOGGER.debug("Current number of warmup runs {}", nrOfWarmUpRuns);
+		LOGGER.debug("Current number of test runs {}", nrOfTestRuns);
 		monitor.beginTestRun();
 		allTestSuitesAvailableAsserter.assertAllTestSuitesAvailable(monitor);
 		try {
@@ -121,7 +130,7 @@ public class DefaultTestRunner implements TestRunner {
 				handleWarmUp(nrOfWarmUpRuns, testSuite);
 
 				for (int i = 0; i < nrOfTestRuns; i++) {
-					LOGGER.info("Executing testsuite {} ({})", new Object[] { testSuite.getLabel(), i + 1 });
+					LOGGER.debug("Executing testsuite {} ({})", new Object[] { testSuite.getLabel(), i + 1 });
 					executeTest(testSuite);
 				}
 			}
@@ -141,12 +150,16 @@ public class DefaultTestRunner implements TestRunner {
 		}
 	}
 
-	public void executeTestSuite(String testSuiteLabel) {
+	public boolean executeTestSuite(String testSuiteLabel) {
 		TestSuite testSuite = findTestSuiteByLabel(testSuiteLabel);
 		if (testSuite != null) {
+			monitor.beginTestRun();
 			executeTest(testSuite);
+			monitor.endTestRun();
+			return true;
 		} else {
 			LOGGER.info("No Test suite found with label: {}", testSuiteLabel);
+			return false;
 		}
 	}
 
@@ -161,10 +174,40 @@ public class DefaultTestRunner implements TestRunner {
 		return null;
 	}
 
-	private void executeTest(final TestSuite testSuite) {
+	private void executeTest(TestSuite testSuite) {
+		// check for TestSuiteLifecycle
+		DependencyManager lifecycleDependencyManager = null;
+		Component lifecycleWiringComponent = null;
 		boolean runInParallel = isTestSuiteConcurrent(testSuite.getLabel());
 
 		monitor.beginTestSuite(testSuite);
+		if (testSuite instanceof TestSuiteLifecycle) {
+			TestSuiteLifecycle testSuiteLifecycle = (TestSuiteLifecycle) testSuite;
+			lifecycleDependencyManager = new DependencyManager(dependencyManager.getBundleContext());
+			TestSuiteWiringService wiringService = new TestSuiteWiringService(testSuiteLifecycle);
+			lifecycleWiringComponent = dependencyManager.createComponent()
+					.setImplementation(wiringService)
+					.setComposition("getComposition")
+					.setAutoConfig(Component.class, false)
+					.setAutoConfig(BundleContext.class, false)
+					.setAutoConfig(ServiceRegistration.class, false)
+					.setAutoConfig(DependencyManager.class, false)
+					.setCallbacks(wiringService, null, "start", null, null);
+			testSuiteLifecycle.setup(lifecycleDependencyManager);
+			
+			testSuiteLifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
+			dependencyManager.add(lifecycleWiringComponent);
+			
+			if (!wiringService.await(5, TimeUnit.SECONDS)) {
+				monitor.error("Test lifecycle wiring timed out. Dependencies were not be satisfied.", null);
+				dependencyManager.remove(lifecycleWiringComponent);
+				monitor.endTestSuite(testSuite);
+				return;
+			}
+			
+			((TestSuiteLifecycle) testSuite).initializeTestSuite();
+		}
+
 		try {
 			for (final TestCase testCase : testSuite.getTestCases()) {
 				executeTestCase(testSuite, runInParallel, testCase);
@@ -173,9 +216,42 @@ public class DefaultTestRunner implements TestRunner {
 			monitor.error("Exception while running test suite", t);
 		} finally {
 			monitor.endTestSuite(testSuite);
+			if (testSuite instanceof TestSuiteLifecycle) {
+				TestSuiteLifecycle lifecycle = (TestSuiteLifecycle) testSuite;
+				lifecycle.cleanupTestSuite();
+				lifecycleDependencyManager.clear(); // teardown all configuration
+				dependencyManager.remove(lifecycleWiringComponent);
+			}
 		}
 	}
+	
+	static class TestSuiteWiringService {
+		
+		private TestSuiteLifecycle testSuiteLifecycle;
+		private CountDownLatch latch;
 
+		public TestSuiteWiringService(TestSuiteLifecycle testSuiteLifecycle) {
+			this.testSuiteLifecycle = testSuiteLifecycle;
+			this.latch = new CountDownLatch(1);
+		}
+		
+		Object[] getComposition() {
+			return new Object[] { testSuiteLifecycle };
+		}
+		
+		void start() {
+			latch.countDown();
+		}
+		
+		boolean await(long timeout, TimeUnit unit) {
+			try {
+				return latch.await(timeout, unit);
+			} catch (InterruptedException e) {
+				return false;
+			}
+		}
+	}
+	
 	private void executeTestCase(final TestSuite testSuite, boolean runInParallel, final TestCase testCase) {
 		monitor.beginTest(testCase);
 		try {
