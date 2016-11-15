@@ -28,6 +28,11 @@ import java.util.List;
 public interface TestSuite {
 
 	/**
+	 * @return A list of all test cases for this TestSuite
+	 */
+	List<TestCase> getTestCases();
+	
+	/**
 	 * Runs the given testCase
 	 * 
 	 * @param testCaseId
@@ -36,11 +41,6 @@ public interface TestSuite {
 	 *            the call back monitor to accept test results.
 	 */
 	void test(String testCaseId, TestMonitor monitor);
-
-	/**
-	 * @return A list of all test cases for this TestSuite
-	 */
-	List<TestCase> getTestCases();
 	
 	/**
 	 * @return A descriptive label for this TestSuite

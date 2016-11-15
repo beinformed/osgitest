@@ -27,6 +27,8 @@ public interface TestRunner {
 	
 	/**
 	 * Execute a specific test suite.
+	 * 
+	 * @return returns true if the testSuite exists, false if it doesn't
 	 */
-	public void executeTestSuite(String testSuiteId);
+	public boolean executeTestSuite(String testSuiteId);
 }
