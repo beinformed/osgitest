@@ -198,7 +198,7 @@ public class DefaultTestRunner implements TestRunner {
 			testSuiteLifecycle.declareDependencies(lifecycleWiringComponent, dependencyManager);
 			dependencyManager.add(lifecycleWiringComponent);
 			
-			if (!wiringService.await(5, TimeUnit.SECONDS)) {
+			if (!wiringService.await(30, TimeUnit.SECONDS)) {
 				monitor.error("Test lifecycle wiring timed out. Dependencies were not be satisfied.", null);
 				dependencyManager.remove(lifecycleWiringComponent);
 				monitor.endTestSuite(testSuite);
