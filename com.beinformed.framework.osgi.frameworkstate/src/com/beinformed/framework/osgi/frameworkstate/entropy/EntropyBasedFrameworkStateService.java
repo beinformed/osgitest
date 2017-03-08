@@ -15,23 +15,28 @@
  */
 package com.beinformed.framework.osgi.frameworkstate.entropy;
 
+import static java.util.concurrent.ConcurrentHashMap.newKeySet;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.osgi.framework.ServiceEvent.REGISTERED;
+import static org.osgi.framework.ServiceEvent.UNREGISTERING;
+
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang.time.StopWatch;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleEvent;
 import org.osgi.framework.BundleListener;
-import org.osgi.framework.ServiceReference;
+import org.osgi.framework.InvalidSyntaxException;
+import org.osgi.framework.ServiceEvent;
+import org.osgi.framework.ServiceListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,52 +46,52 @@ import com.beinformed.framework.osgi.frameworkstate.State;
 import com.beinformed.framework.osgi.frameworkstate.Token;
 
 /**
- * FrameworkStateService implementation based on framework entropy. It monitors (un)publishing of services and considers
- * the framework to be available once no services are being (un)published for a certain amount of time. 
- *
+ * FrameworkStateService implementation based on framework entropy. It monitors
+ * (un)publishing of services and considers the framework to be available once
+ * no services are being (un)published for a certain amount of time.
  */
-public class EntropyBasedFrameworkStateService implements BundleListener, FrameworkStateService {
+public class EntropyBasedFrameworkStateService implements BundleListener, ServiceListener, FrameworkStateService {
 	private static final Logger LOGGER = LoggerFactory.getLogger(EntropyBasedFrameworkStateService.class);
+	private static final String SERVICES_TO_IGNORE = "(!(objectClass=org.osgi.service.event.EventHandler))";
 
-	private final Set<Token> tokens = Collections.synchronizedSet(new HashSet<Token>());
+	private final Map<Bundle, Token> starting;
+	private final Map<Bundle, Token> stopping;
+	private final Set<Token> tokens;
+	private final List<FrameworkStateListener> listeners; // protected by itself
+	private final Object stateLock;
+	private final ExecutorService executor;
+	private final AtomicInteger monitorStatus;
 
-	private final List<FrameworkStateListener> listeners = new ArrayList<FrameworkStateListener>();
-
-	private int entropyTimeoutMillis = 1000;
-
-	private int pollingIntervalMillis = 200;
-
-	private final StopWatch idleWatch = new StopWatch();
-
-	private Object stateLock = new Object();
-
-	private volatile State currentState = State.UNAVAILABLE;
-
-	private ExecutorService executor = Executors.newSingleThreadExecutor();
-
+	// Injected by Felix DM...
 	private volatile BundleContext bundleContext;
 
-	private AtomicInteger monitorStatus = new AtomicInteger(0);
-
-	private final static List<String> serviceInterfacesToIgnore = new ArrayList<String>();
-	static {
-		serviceInterfacesToIgnore.add("org.osgi.service.event.EventHandler");
-	}
+	private Duration entropyTimeout;
+	private Duration pollingInterval;
+	private Instant idleSince; // protected by stateLock
+	private State currentState; // protected by stateLock
 
 	public EntropyBasedFrameworkStateService() {
-		if (System.getProperty("entropyTimeout") != null) {
-			entropyTimeoutMillis = Integer.parseInt(System.getProperty("entropyTimeout"));
-			LOGGER.info("Using configured entropy timeout of {} ms.", new String[] { String.valueOf(entropyTimeoutMillis) });
-		}
-		if (System.getProperty("entropyInterval") != null) {
-			pollingIntervalMillis = Integer.parseInt(System.getProperty("entropyInterval"));
-			LOGGER.info("Using configured entropy polling interval of {} ms.", new String[] { String.valueOf(pollingIntervalMillis) });
-		}
+		starting = new ConcurrentHashMap<Bundle, Token>();
+		stopping = new ConcurrentHashMap<Bundle, Token>();
+		tokens = newKeySet();
+		listeners = new ArrayList<>();
+		stateLock = new Object();
+		executor = newSingleThreadExecutor();
+		monitorStatus = new AtomicInteger(0);
+		currentState = State.UNAVAILABLE;
 	}
 
-	void init() {
+	void init() throws InvalidSyntaxException {
 		LOGGER.debug("init");
+
+		entropyTimeout = Duration.ofMillis(getProperty("entropyTimeout", 1000));
+		LOGGER.info("Using configured entropy timeout of {} ms.", entropyTimeout.toMillis());
+
+		pollingInterval = Duration.ofMillis(getProperty("entropyInterval", 200));
+		LOGGER.info("Using configured entropy polling interval of {} ms.", pollingInterval.toMillis());
+
 		bundleContext.addBundleListener(this);
+		bundleContext.addServiceListener(this, SERVICES_TO_IGNORE);
 	}
 
 	void start() {
@@ -101,16 +106,18 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 	}
 
 	void destroy() {
+		bundleContext.removeServiceListener(this);
 		bundleContext.removeBundleListener(this);
 		LOGGER.debug("Destroy called");
 	}
 
 	private void handleStateChange(State newState) {
-		LOGGER.info("System state changed to: " + newState);
+		LOGGER.info("System state changed to: {}", newState);
 		FrameworkStateListener[] list;
-		// first make a copy of the current list of listeners in a synchronized block
-		// because we want to handle concurrent access to this list
-		// e.g. if during notification one of the listeners adds/removes another systemstate listener
+		// first make a copy of the current list of listeners in a synchronized
+		// block because we want to handle concurrent access to this list e.g.
+		// if during notification one of the listeners adds/removes another
+		// systemstate listener
 		synchronized (listeners) {
 			list = listeners.toArray(new FrameworkStateListener[listeners.size()]);
 		}
@@ -120,34 +127,35 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		for (FrameworkStateListener listener : list) {
 			try {
 				if (listeners.contains(listener)) {
-					//listeners might have changed in the mean time (proofed to happen), narrow the chance on notifying old listeners
+					// listeners might have changed in the mean time (proofed to
+					// happen), narrow the chance on notifying old listeners
 					notifyListener(listener, newState);
 				}
 			} catch (Exception e) {
-				LOGGER.error("Exception while trying to notify listener " + listener.getClass().getName() + "(" + listener
-						+ ") of system stable state change to " + newState, e);
+				LOGGER.error("Exception while trying to notify listener " + listener.getClass().getName() + "("
+						+ listener + ") of system stable state change to " + newState, e);
 			}
 		}
 
-		LOGGER.info("Notified listeners, system is: " + newState);
+		LOGGER.debug("Notified listeners, system is: {}", newState);
 	}
 
 	private void notifyListener(FrameworkStateListener listener, State state) {
 		switch (state) {
-			case STARTING:
-				listener.onStarting();
-				break;
-			case STOPPING:
-				listener.onStopping();
-				break;
-			case AVAILABLE:
-				listener.onAvailable();
-				break;
-			case UNAVAILABLE:
-				listener.onUnavailable();
-				break;
-			default:
-				throw new IllegalStateException("Attempt to notify of an unknown system state: " + state);
+		case STARTING:
+			listener.onStarting();
+			break;
+		case STOPPING:
+			listener.onStopping();
+			break;
+		case AVAILABLE:
+			listener.onAvailable();
+			break;
+		case UNAVAILABLE:
+			listener.onUnavailable();
+			break;
+		default:
+			throw new IllegalStateException("Attempt to notify of an unknown system state: " + state);
 		}
 	}
 
@@ -155,9 +163,14 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		synchronized (listeners) {
 			listeners.add(listener);
 		}
+
+		State state;
+		synchronized (stateLock) {
+			state = currentState;
+		}
 		// notify the listener outside of the synchronized block so we're
 		// not invoking any callbacks while holding a lock
-		notifyListener(listener, currentState);
+		notifyListener(listener, state);
 	}
 
 	void listenerRemoved(FrameworkStateListener listener) {
@@ -169,8 +182,7 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 	private void handleSystemNoise() {
 		boolean stateChanged = false;
 		synchronized (stateLock) {
-			idleWatch.reset();
-			idleWatch.start();
+			idleSince = Instant.now();
 			if (currentState == State.AVAILABLE || currentState == State.STARTING) {
 				currentState = State.UNAVAILABLE;
 				// flag that indicates we still need to do work outside of the
@@ -184,38 +196,11 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		}
 	}
 
-	void serviceAdded(ServiceReference reference, Object service) {
-		if (isValidService(reference, service)) {
+	@Override
+	public void serviceChanged(ServiceEvent event) {
+		if (event.getType() == REGISTERED || event.getType() == UNREGISTERING) {
 			handleSystemNoise();
 		}
-	}
-
-	void serviceSwapped(ServiceReference oldReference, Object oldService, ServiceReference newReference, Object newService) {
-		if (isValidService(newReference, newService)) {
-			handleSystemNoise();
-		}
-	}
-
-	void serviceRemoved(ServiceReference reference, Object service) {
-		if (isValidService(reference, service)) {
-			handleSystemNoise();
-		}
-	}
-
-	private boolean isValidService(ServiceReference reference, Object service) {
-		Object o = reference.getProperty("objectClass");
-		if (o instanceof String[]) {
-			String[] serviceInterfaces = (String[]) o;
-			// Valid means that at least one of the service interfaces is not in the ignore list.
-			for (String serviceInterface : serviceInterfaces) {
-				if (!serviceInterfacesToIgnore.contains(serviceInterface)) {
-					return true;
-				}
-			}
-			return false;
-		}
-		// Unable to determine...we will react on it anyway
-		return true;
 	}
 
 	class IdleWatchMonitor implements Runnable {
@@ -223,24 +208,26 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 
 		@Override
 		public void run() {
-			LOGGER.debug("*** IdleWatchMonitor.run() - " + monitorStatus.get() + " outstanding units of work: " + tokens.size());
-
 			monitorStatus.incrementAndGet();
+
+			LOGGER.debug("*** IdleWatchMonitor.run() - {} - outstanding units of work: {}",
+					monitorStatus.get(), tokens.size());
 
 			while (!interrupted) {
 				try {
-					Thread.sleep(pollingIntervalMillis);
-					LOGGER.debug("*** IdleWatchMonitor waking up.");
+					Thread.sleep(pollingInterval.toMillis());
+					LOGGER.debug("*** IdleWatchMonitor.run() - {} - waking up...", monitorStatus.get());
 					boolean stateChanged = false;
 
 					synchronized (stateLock) {
 						if (currentState != State.UNAVAILABLE) {
 							interrupted = true;
 						} else {
-							// compare the split time of the monitor to the timeout, and also make
-							// sure we have no outstanding tokens that signal that there is still ongoing
-							// work
-							if (idleWatch.getTime() > entropyTimeoutMillis && tokens.isEmpty()) {
+							Duration idleDuration = Duration.between(idleSince, Instant.now());
+							// compare the split time of the monitor to the timeout, and also
+							// make sure we have no outstanding tokens that signal that there
+							// is still ongoing work
+							if (idleDuration.compareTo(entropyTimeout) > 0 && tokens.isEmpty()) {
 								// yay, we think the system is stable
 								currentState = State.AVAILABLE;
 								stateChanged = true;
@@ -253,27 +240,19 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 						handleStateChange(State.AVAILABLE);
 					}
 				} catch (InterruptedException e) {
-					LOGGER.info("IdleWatchMonitor got interrupted!");
+					LOGGER.info("*** IdleWatchMonitor - {} - got interrupted!",
+							monitorStatus.get());
+
 					interrupted = true;
 				}
 			}
-			LOGGER.debug("*** IdleWatchMonitor.completed()");
+
+			LOGGER.debug("*** IdleWatchMonitor.run() - {} - completed...",
+					monitorStatus.get());
 
 			monitorStatus.decrementAndGet();
 		}
 	}
-
-	public void setTimeoutInMillis(int timeoutInMillis) {
-		this.entropyTimeoutMillis = timeoutInMillis;
-	}
-
-	public void setPollingInterval(int pollingInterval) {
-		this.pollingIntervalMillis = pollingInterval;
-	}
-
-	private final Map<Bundle, Token> starting = Collections.synchronizedMap(new HashMap<Bundle, Token>());
-
-	private final Map<Bundle, Token> stopping = Collections.synchronizedMap(new HashMap<Bundle, Token>());
 
 	@Override
 	public void bundleChanged(BundleEvent event) {
@@ -285,7 +264,7 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		// any other state
 		if (type == BundleEvent.STARTING) {
 			Token token = startWork(bundle);
-			Token old = starting.put(bundle, token);
+			Token old = starting.putIfAbsent(bundle, token);
 			if (old != null) {
 				// this is in fact very weird, the bundle already was in
 				// starting state and entered the same state *again*
@@ -296,8 +275,8 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 				endWork(old);
 			}
 		} else {
-			// when a bundle enters any other state than STARTING, we should make sure it's
-			// no longer on the starting list
+			// when a bundle enters any other state than STARTING, we should
+			// make sure it's no longer on the starting list
 			Token token = starting.remove(bundle);
 			if (token != null) {
 				// it was on the list, so we end the unit of work
@@ -310,7 +289,7 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		// any other state
 		if (type == BundleEvent.STOPPING) {
 			Token token = startWork(bundle);
-			Token old = stopping.put(bundle, token);
+			Token old = stopping.putIfAbsent(bundle, token);
 			if (old != null) {
 				// this is in fact very weird, the bundle already was in
 				// starting state and entered the same state *again*
@@ -321,8 +300,8 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 				endWork(old);
 			}
 		} else {
-			// when a bundle enters any other state than STOPPING, we should make sure it's
-			// no longer on the stopping list
+			// when a bundle enters any other state than STOPPING, we should
+			// make sure it's no longer on the stopping list
 			Token token = stopping.remove(bundle);
 			if (token != null) {
 				// it was on the list, so we end the unit of work
@@ -359,4 +338,16 @@ public class EntropyBasedFrameworkStateService implements BundleListener, Framew
 		}
 	}
 
+	private int getProperty(String key, int dflt) {
+		String val = bundleContext.getProperty(key);
+		try {
+			if (val != null && !"".equals(val)) {
+				return Integer.parseInt(val);
+			}
+		} catch (NumberFormatException e) {
+			// Too bad, use default value instead...
+			LOGGER.debug("Unable to parse property " + key + ": " + val, e);
+		}
+		return dflt;
+	}
 }

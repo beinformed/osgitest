@@ -1,16 +1,9 @@
 Bundle-Version: 1.0.1
 Bundle-Activator: com.beinformed.framework.osgi.frameworkstate.entropy.Activator
+Export-Package: com.beinformed.framework.osgi.frameworkstate;version=1.0.0
 Private-Package: \
-	com.beinformed.framework.osgi.frameworkstate.entropy,\
-	org.apache.commons.lang,\
-	org.apache.commons.lang.time,\
-	org.apache.commons.lang.text,\
-	org.apache.commons.lang.builder,\
-	org.apache.commons.lang.exception,\
-	org.apache.commons.lang.math,\
-	org.apache.commons.lang.reflect
+	com.beinformed.framework.osgi.frameworkstate.entropy
 Bundle-Name: OSGi framework state entropy based implementation
 Bundle-Copyright: Be Informed B.V.
 Bundle-License: http://www.apache.org/licenses/LICENSE-2.0
 Include-Resource: META-INF/LICENSE=license/LICENSE
-	

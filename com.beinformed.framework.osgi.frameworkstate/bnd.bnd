@@ -1,6 +1,6 @@
 -buildpath: \
-	lib/org.apache.commons.lang-2.6.0.jar;version=file,\
-	osgi.core,\
-	org.apache.felix.dependencymanager;version='[4.1.1,4.1.1]',\
-	slf4j.api
+	osgi.core;version='[4.2, 5.0)',\
+	org.apache.felix.dependencymanager;version='[4.1, 4.2)',\
+	slf4j.api;version='[1.7, 1.8)'
+
 -sub: *.bnd

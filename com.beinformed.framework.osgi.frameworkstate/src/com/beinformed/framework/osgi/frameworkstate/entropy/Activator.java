@@ -28,20 +28,12 @@ public class Activator extends DependencyActivatorBase {
 	@Override
 	public void init(BundleContext ctx, DependencyManager mgr)
 			throws Exception {
-		
-		mgr.add(createComponent().setInterface(new String[] { BundleListener.class.getName(), FrameworkStateService.class.getName() }, null)
+
+		mgr.add(createComponent()
+				.setInterface(new String[] { BundleListener.class.getName(), FrameworkStateService.class.getName() }, null)
 				.setImplementation(EntropyBasedFrameworkStateService.class)
 				.add(createServiceDependency().setService(FrameworkStateListener.class)
-						.setCallbacks("listenerAdded", null, "listenerRemoved", null))
-				.add(createServiceDependency().setService("(objectClass=*)")
-						.setCallbacks("serviceAdded", null, "serviceRemoved", "serviceSwapped")));
+						.setCallbacks("listenerAdded", null, "listenerRemoved", null)));
 	}
-	
-	@Override
-	public void destroy(BundleContext ctx, DependencyManager mgr)
-			throws Exception {
-
-	}
-
 
 }
